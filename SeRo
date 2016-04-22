@@ -1,0 +1,1836 @@
+Binary files R3.3.0/.DS_Store and so2016/.DS_Store differ
+diff -ruNP R3.3.0/bin/Makefile so2016/bin/Makefile
+--- R3.3.0/bin/Makefile	2016-04-15 09:02:38.000000000 -0300
++++ so2016/bin/Makefile	2016-03-25 17:28:22.000000000 -0300
+@@ -3,6 +3,6 @@
+ 
+ SUBDIR=	cat chmod cp date df echo ed expr hostname \
+ 	kill ksh ln ls mkdir mv pax pwd rm rmdir sh \
+-	sleep stty sync test
++	sleep stty sync test padmon
+ 
+ .include <bsd.subdir.mk>
+diff -ruNP R3.3.0/bin/padmon/Makefile so2016/bin/padmon/Makefile
+--- R3.3.0/bin/padmon/Makefile	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/Makefile	2016-04-12 13:43:45.000000000 -0300
+@@ -0,0 +1,4 @@
++PROG= padmon
++SRCS= padmon.c parser.c ps2.c
++
++.include <bsd.prog.mk>
+diff -ruNP R3.3.0/bin/padmon/padmon.1 so2016/bin/padmon/padmon.1
+--- R3.3.0/bin/padmon/padmon.1	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/padmon.1	2016-03-25 17:28:22.000000000 -0300
+@@ -0,0 +1 @@
++.\" Copyright (c) 2015
+diff -ruNP R3.3.0/bin/padmon/padmon.c so2016/bin/padmon/padmon.c
+--- R3.3.0/bin/padmon/padmon.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/padmon.c	2016-04-12 13:41:56.000000000 -0300
+@@ -0,0 +1,29 @@
++/**
++ * Copyright 2016 - Sebastian Orellana and Roberto Roman
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++ #include <locale.h>
++ #include <stdio.h>
++ #include <stdlib.h>
++ #include <string.h>
++ #include "padmon.h"
++
++ int main(int argc, char* argv[])
++ {
++   setprogname(*argv);
++   setlocale(LC_ALL, "");
++   parseCmd(argc, argv);
++   return 0;
++ }
+diff -ruNP R3.3.0/bin/padmon/padmon.h so2016/bin/padmon/padmon.h
+--- R3.3.0/bin/padmon/padmon.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/padmon.h	2016-04-12 14:00:10.000000000 -0300
+@@ -0,0 +1,39 @@
++/**
++ * Copyright 2016 - Sebastian Orellana and Roberto Roman
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#define _SYSTEM		1	/* tell headers that this is the kernel */
++
++#include <dirent.h>
++#include <minix/procfs.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <minix/config.h>	/* MUST be first */
++#include <sys/types.h>
++#include <minix/const.h>
++#include <minix/type.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <string.h>
++#include <minix/syslib.h>
++#include <minix/sysutil.h>
++#include <minix/sysinfo.h>
++#include <minix/timers.h>
++#include <minix/param.h>
++#include <limits.h>
++#include <errno.h>
++#include <sys/param.h>
++#include "proto.h"
+diff -ruNP R3.3.0/bin/padmon/parser.c so2016/bin/padmon/parser.c
+--- R3.3.0/bin/padmon/parser.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/parser.c	2016-04-15 09:00:52.000000000 -0300
+@@ -0,0 +1,91 @@
++#include "padmon.h"
++
++void parseCmd(int argc, char* argv[])
++{
++  if (argc == 3)
++  {
++    int pid = atoi(argv[2]);
++
++    if (!strcmp(argv[1], "-r"))
++    {
++      int r = spadmon_run(pid);
++      if (r != OK)
++        parseError(r);
++    }
++
++    else if (!strcmp(argv[1], "-s"))
++    {
++      int r = spadmon_sleep(pid);
++      if (r != OK)
++        parseError(r);
++    }
++
++    else if (!strcmp(argv[1], "-t"))
++    {
++      int r = spadmon_stop(pid);
++      if (r != OK)
++        parseError(r);
++    }
++
++    else if (!strcmp(argv[1], "-z"))
++    {
++      int r = spadmon_zombie(pid);
++      if (r != OK)
++        parseError(r);
++    }
++
++    else if (!strcmp(argv[1], "-e"))
++    {
++      int r = spadmon_exit(pid);
++      if (r != OK)
++        parseError(r);
++    }
++
++    else
++    {
++      errInvCmd();
++    }
++  }
++  else if (argc == 2)
++  {
++    if (!strcmp(argv[1], "-help"))
++    {
++      showHelp();
++    }
++    else if (!strcmp(argv[1], "-ps"))
++    {
++      getProcessList();
++    }
++    else
++    {
++      errInvCmd();
++    }
++  }
++  else
++  {
++    errInvCmd();
++  }
++  return;
++}
++
++void errInvCmd()
++{
++  printf("Invalid command.\n");
++  printf("usage: padmon [-help] [-ps] [-r <pid/endpoint>] [-s <pid/endpoint>] [-t <pid/endpoint>] [-z <pid/endpoint>] [-e <pid/endpoint>]\n");
++}
++
++void showHelp()
++{
++  printf("Padmon guide:\n");
++  printf("Process State [-ps]: shows all processes in the system and their status.\n");
++  printf("Running [-r PID]: sets the status of a process (PID) to running.\n");
++  printf("Sleeping [-s PID]: sets the status of a process (PID) to sleeping.\n");
++  printf("Stopped [-t PID]: sets the status of a process (PID) to stopped.\n");
++  printf("Zombie [-z PID]: sets the status of a process (PID) to zombie.\n");
++  printf("Exit [-e PID]: kills a process (PID).\n");
++}
++
++void parseError(int error)
++{
++  //printf("Error: %d\n", error);
++}
+diff -ruNP R3.3.0/bin/padmon/proto.h so2016/bin/padmon/proto.h
+--- R3.3.0/bin/padmon/proto.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/proto.h	2016-04-14 23:53:39.000000000 -0300
+@@ -0,0 +1,31 @@
++/**
++ * Copyright 2016 - Sebastian Orellana and Roberto Roman
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++ /* Prototypes for padmon */
++
++void parseCmd(int argc, char* argv[]);
++void errInvCmd(void);
++void showHelp(void);
++void getProcessList(void);
++char getState(pid_t pid);
++void parseError(int err);
++
++/* spadmon calls */
++int spadmon_run(pid_t pid);
++int spadmon_sleep(pid_t pid);
++int spadmon_stop(pid_t pid);
++int spadmon_zombie(pid_t pid);
++int spadmon_exit(pid_t pid);
+diff -ruNP R3.3.0/bin/padmon/ps2.c so2016/bin/padmon/ps2.c
+--- R3.3.0/bin/padmon/ps2.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/bin/padmon/ps2.c	2016-04-12 14:00:05.000000000 -0300
+@@ -0,0 +1,97 @@
++/* This is the master header for PM.  It includes some other files
++ * and defines the principal constants.
++ */
++#define _SYSTEM		1	/* tell headers that this is the kernel */
++
++/* The following are so basic, all the *.c files get them automatically. */
++#include <minix/config.h>	/* MUST be first */
++#include <sys/types.h>
++#include <minix/const.h>
++#include <minix/type.h>
++
++#include <fcntl.h>
++#include <unistd.h>
++#include <string.h>
++#include <minix/syslib.h>
++#include <minix/sysutil.h>
++#include <minix/sysinfo.h>
++#include <minix/timers.h>
++#include <minix/param.h>
++
++#include <limits.h>
++#include <errno.h>
++#include <sys/param.h>
++
++#include "proto.h"
++
++#include <dirent.h>
++#include <minix/procfs.h>
++#include "padmon.h"
++
++#define PPS_HEADER "---------------------\n PID/EndPoint State\n---------------------\n"
++#define PPS_FORMAT "  %d\t\t%c\n"
++#define PPS_FOOTER "---------------------\n"
++
++
++void getProcessList(void)
++{
++  DIR *p_dir;
++  struct dirent *p_ent;
++  pid_t pid;
++  char *end;
++
++  p_dir = opendir("/proc");
++
++  if (p_dir == NULL) printf("Can't open\n");
++
++  p_ent = readdir(p_dir);
++
++  printf(PPS_HEADER);
++  while (p_ent != NULL) {
++	pid = strtol(p_ent->d_name, &end, 10);
++
++	if (!end[0] && pid != 0) {
++    printf (PPS_FORMAT, pid, getState(pid));
++	}
++
++	p_ent = readdir(p_dir);
++  }
++  printf(PPS_FOOTER);
++
++  closedir(p_dir);
++}
++
++char getState(pid_t pid)
++{
++  FILE *fp;
++  int version, datacount = 0;
++  char path[PATH_MAX], status;
++
++  sprintf(path, "/proc/%d/psinfo", pid);
++
++  if ((fp = fopen(path, "r")) == NULL)
++	return 'F';
++
++  if (fscanf(fp, "%d", &version) != 1) {
++	fclose(fp);
++	return 'F';
++  }
++
++  /* The psinfo file's version must match what we expect. */
++  if (version != PSINFO_VERSION) {
++	fputs("procfs version mismatch!\n", stderr);
++  fclose(fp);
++	return 'F';
++  }
++
++  for (datacount = 0 ; datacount < 4 ; datacount++)
++    fscanf(fp, "%s", &status);
++
++  if (status == 'S')
++    status = 'D';
++
++  if (status == 'W')
++    status = 'S';
++
++  return status;
++}
+diff -ruNP R3.3.0/etc/rc so2016/etc/rc
+--- R3.3.0/etc/rc	2016-04-15 09:02:38.000000000 -0300
++++ so2016/etc/rc	2016-03-25 17:29:57.000000000 -0300
+@@ -64,7 +64,7 @@
+     if [ ! -x $binlocation ]
+     then	binlocation=/sbin/$service
+     fi
+-    service $opt edit $binlocation -label $service "$@" 
++    service $opt edit $binlocation -label $service "$@"
+ }
+ 
+ while getopts 'saf' opt
+@@ -135,7 +135,7 @@
+     then	usrdev="$cddev"p2
+     		echo "/usr on cd is $usrdev"
+ 		mount -r $usrdev /usr
+-    else	
++    else
+     # If we're not booting from CD, fsck + mount using /etc/fstab.
+ 		fsck -x / $fflag $fsckopts
+ 		mount -a
+@@ -151,6 +151,7 @@
+ 	edit rs
+ 	edit vm
+ 	edit pm
++  edit spadmon
+ 	edit sched
+ 	edit vfs
+ 	edit ds
+@@ -190,18 +191,18 @@
+     if [ -f /var/run/devmand.pid ]
+     then
+ 	kill -INT `cat /var/run/devmand.pid`
+-	# without this delay the following will 
++	# without this delay the following will
+ 	# be printed in the console
+ 	# RS: devman not running?
+ 	sleep 1
+     fi
+     #
+-    # usbd needs to be stopped exactly 
++    # usbd needs to be stopped exactly
+     # at this stage(before stopping devman
+     # and after stopping the services
+     # stated by devmand)
+     if [ -x /usr/pkg/etc/rc.d/usbd ]
+-    then 
++    then
+ 	/usr/pkg/etc/rc.d/usbd stop
+     fi
+ 
+diff -ruNP R3.3.0/etc/system.conf so2016/etc/system.conf
+--- R3.3.0/etc/system.conf	2016-04-15 09:02:38.000000000 -0300
++++ so2016/etc/system.conf	2016-03-25 17:30:23.000000000 -0300
+@@ -69,6 +69,20 @@
+ 	quantum	       500;	# default server quantum
+ };
+ 
++service spadmon
++{
++	uid     0;
++	ipc	ALL;	# All ipc targets allowed
++	system	ALL;		# ALL kernel calls allowed
++	vm ALL;
++	io	NONE;		# No I/O range allowed
++	irq	NONE;		# No IRQ allowed
++	sigmgr          rs;	# Signal manager is RS
++	scheduler   KERNEL;	# Scheduler is KERNEL
++	priority	 4;	# priority queue 4
++	quantum	       500;	# default server quantum
++};
++
+ service sched
+ {
+ 	uid     0;
+@@ -494,12 +508,12 @@
+ 		DEVIO		# 21
+ 		SDEVIO		# 22
+ 	;
+-	pci class	
++	pci class
+ 		4/1		# Multimedia / Audio device
+ 	;
+ 	ipc
+ 		SYSTEM pm rs tty ds vfs vm
+-		pci inet lwip amddev 
++		pci inet lwip amddev
+ 		;
+ 	uid     0;
+ };
+@@ -563,14 +577,14 @@
+ 		IRQCTL          # 19
+ 	;
+ 	# Interrupts allowed
+-	irq	
++	irq
+ 		64
+ 		83
+ 	;		# IRQs allowed
+ 	priority	 4;	# priority queue 4
+ };
+ 
+-service fb 
++service fb
+ {
+ 	system
+ 		UMAP		# 14
+@@ -589,7 +603,7 @@
+ 		IRQCTL          # 19
+ 		PADCONF		# 57
+ 	;
+-	irq	
++	irq
+ 		29	# GPIO module 1 (dm37xx)
+ 		30	# GPIO module 2 (dm37xx)
+ 		31	# GPIO module 3 (dm37xx)
+@@ -602,7 +616,7 @@
+ 		97	# GPIO module 0b (am335x)
+ 		98	# GPIO module 1a (am335x)
+ 		99	# GPIO module 1b (am335x)
+-	;		
++	;
+ 
+ };
+ 
+Binary files R3.3.0/minix/.DS_Store and so2016/minix/.DS_Store differ
+diff -ruNP R3.3.0/minix/include/minix/Makefile so2016/minix/include/minix/Makefile
+--- R3.3.0/minix/include/minix/Makefile	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/include/minix/Makefile	2016-04-14 18:58:29.000000000 -0300
+@@ -22,6 +22,6 @@
+ 	u64.h usb.h usb_ch9.h vbox.h \
+ 	vboxfs.h vboxif.h vboxtype.h vm.h \
+ 	vfsif.h vtreefs.h libminixfs.h netsock.h \
+-	virtio.h
++	virtio.h procflag.h
+ 
+ .include <bsd.kinc.mk>
+diff -ruNP R3.3.0/minix/include/minix/callnr.h so2016/minix/include/minix/callnr.h
+--- R3.3.0/minix/include/minix/callnr.h	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/include/minix/callnr.h	2016-04-14 21:06:10.000000000 -0300
+@@ -58,8 +58,11 @@
+ #define PM_GETEPINFO		(PM_BASE + 45)
+ #define PM_GETPROCNR		(PM_BASE + 46)
+ #define PM_GETSYSINFO		(PM_BASE + 47)
++#define PM_PROCFLAG		(PM_BASE + 48)
+ 
+-#define NR_PM_CALLS		48	/* highest number from base plus one */
++
++
++#define NR_PM_CALLS		49	/* highest number from base plus one */
+ 
+ /*===========================================================================*
+  *				Calls to VFS				     *
+@@ -121,4 +124,24 @@
+ 
+ #define NR_VFS_CALLS		49	/* highest number from base plus one */
+ 
++/*===========================================================================*
++ *				Calls to SPADMON                                      				     *
++ *===========================================================================*/
++
++#define SPADMON_BASE			0x1700
++
++#define IS_SPADMON_CALL(type)	(((type) & ~0xff) == SPADMON_BASE)
++
++/* Message type 0 is traditionally reserved. */
++#define SPADMON_PROC_STATE  (SPADMON_BASE + 1)
++#define SPADMON_STATES      (SPADMON_BASE + 2)
++#define SPADMON_RUN         (SPADMON_BASE + 3)
++#define SPADMON_SLEEP       (SPADMON_BASE + 4)
++#define SPADMON_STOP        (SPADMON_BASE + 5)
++#define SPADMON_ZOMBIE      (SPADMON_BASE + 6)
++#define SPADMON_EXIT        (SPADMON_BASE + 7)
++#define SPADMON_TEST_CALL   (SPADMON_BASE + 8)
++
++#define NR_SPADMON_CALLS		9	/* highest number from base plus one */
++
+ #endif /* !_MINIX_CALLNR_H */
+diff -ruNP R3.3.0/minix/include/minix/com.h so2016/minix/include/minix/com.h
+--- R3.3.0/minix/include/minix/com.h	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/include/minix/com.h	2016-03-25 17:32:18.000000000 -0300
+@@ -22,7 +22,7 @@
+  *    0xE00 -  0xEFF	Common system messages (e.g. system signals)
+  *    0xF00 -  0xFFF	Scheduling messages
+  *   0x1000 - 0x10FF	Notify messages
+- *   0x1100 - 0x11FF	USB  
++ *   0x1100 - 0x11FF	USB
+  *   0x1200 - 0x12FF	Devman
+  *   0x1300 - 0x13FF	TTY requests
+  *   0x1400 - 0x14FF	Real Time Clock requests and responses
+@@ -33,7 +33,7 @@
+  */
+ 
+ #ifndef _MINIX_COM_H
+-#define _MINIX_COM_H 
++#define _MINIX_COM_H
+ 
+ /*===========================================================================*
+  *            	Process numbers of processes in the system image	     *
+@@ -49,7 +49,7 @@
+ 
+ /* Number of tasks. Note that NR_PROCS is defined in <minix/config.h>. */
+ #define MAX_NR_TASKS	1023
+-#define NR_TASKS	  5 
++#define NR_TASKS	  5
+ 
+ /* User-space processes, that is, device drivers, servers, and INIT. */
+ #define PM_PROC_NR   ((endpoint_t) 0)	/* process manager */
+@@ -62,7 +62,8 @@
+ #define MFS_PROC_NR  ((endpoint_t) 7)   /* minix root filesystem */
+ #define VM_PROC_NR   ((endpoint_t) 8)   /* memory server */
+ #define PFS_PROC_NR  ((endpoint_t) 9)  /* pipe filesystem */
+-#define LAST_SPECIAL_PROC_NR	10	/* An untyped version for
++#define SPADMON_PROC_NR  ((endpoint_t) 10)  /* spadmon server */
++#define LAST_SPECIAL_PROC_NR	11	/* An untyped version for
+                                            computation in macros.*/
+ #define INIT_PROC_NR ((endpoint_t) LAST_SPECIAL_PROC_NR)  /* init
+                                                         -- goes multiuser */
+@@ -80,7 +81,7 @@
+  * so make sure that these types do not interfere with other message types.
+  * Notifications are prioritized because of the way they are unhold() and
+  * blocking notifications are delivered. The lowest numbers go first. The
+- * offset are used for the per-process notification bit maps. 
++ * offset are used for the per-process notification bit maps.
+  */
+ #define NOTIFY_MESSAGE		  0x1000
+ /* FIXME the old is_notify(a) should be replaced by is_ipc_notify(status). */
+@@ -144,7 +145,7 @@
+ 							 * driver (safecopy)
+ 							 */
+ #define BUSC_PCI_DEL_ACL	(BUSC_RQ_BASE + 18)	/* Delete the ACL of a
+-							 * driver 
++							 * driver
+ 							 */
+ #define BUSC_PCI_GET_BAR	(BUSC_RQ_BASE + 19)	/* Get Base Address
+ 							 * Register properties
+@@ -161,8 +162,8 @@
+  *===========================================================================*/
+ 
+ /* Base type for data link layer requests and responses. */
+-#define DL_RQ_BASE	0x200		
+-#define DL_RS_BASE	0x280		
++#define DL_RQ_BASE	0x200
++#define DL_RS_BASE	0x280
+ 
+ #define IS_DL_RQ(type) (((type) & ~0x7f) == DL_RQ_BASE)
+ #define IS_DL_RS(type) (((type) & ~0x7f) == DL_RS_BASE)
+@@ -193,11 +194,11 @@
+  *                  SYSTASK request types and field names                    *
+  *===========================================================================*/
+ 
+-/* System library calls are dispatched via a call vector, so be careful when 
++/* System library calls are dispatched via a call vector, so be careful when
+  * modifying the system call numbers. The numbers here determine which call
+  * is made from the call vector.
+- */ 
+-#define KERNEL_CALL	0x600	/* base for kernel calls to SYSTEM */ 
++ */
++#define KERNEL_CALL	0x600	/* base for kernel calls to SYSTEM */
+ 
+ #  define SYS_FORK       (KERNEL_CALL + 0)	/* sys_fork() */
+ #  define SYS_EXEC       (KERNEL_CALL + 1)	/* sys_exec() */
+@@ -237,7 +238,7 @@
+ #  define SYS_SETGRANT   (KERNEL_CALL + 34)	/* sys_setgrant() */
+ #  define SYS_READBIOS   (KERNEL_CALL + 35)	/* sys_readbios() */
+ 
+-#  define SYS_SPROF      (KERNEL_CALL + 36)     /* sys_sprof() */ 
++#  define SYS_SPROF      (KERNEL_CALL + 36)     /* sys_sprof() */
+ #  define SYS_CPROF      (KERNEL_CALL + 37)     /* sys_cprof() */
+ #  define SYS_PROFBUF    (KERNEL_CALL + 38)     /* sys_profbuf() */
+ 
+@@ -303,7 +304,7 @@
+ #  define IRQ_ENABLE        3	/* enable interrupts */
+ #  define IRQ_DISABLE       4	/* disable interrupts */
+ #  define IRQ_REENABLE  0x001	/* reenable IRQ line after interrupt */
+-#  define IRQ_BYTE      0x100	/* byte values */      
++#  define IRQ_BYTE      0x100	/* byte values */
+ #  define IRQ_WORD      0x200	/* word values */
+ #  define IRQ_LONG      0x400	/* long values */
+ 
+@@ -435,9 +436,9 @@
+ #define SYS_STATE_CLEAR_IPC_REFS    1	/* clear IPC references */
+ 
+ /* Subfunctions for SYS_SCHEDCTL */
+-#  define SCHEDCTL_FLAG_KERNEL	1	/* mark kernel scheduler and remove 
+-					 * RTS_NO_QUANTUM; otherwise caller is 
+-					 * marked scheduler 
++#  define SCHEDCTL_FLAG_KERNEL	1	/* mark kernel scheduler and remove
++					 * RTS_NO_QUANTUM; otherwise caller is
++					 * marked scheduler
+ 					 */
+ 
+ /* Field names for SYS_PADCONF */
+diff -ruNP R3.3.0/minix/include/minix/ipc.h so2016/minix/include/minix/ipc.h
+--- R3.3.0/minix/include/minix/ipc.h	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/include/minix/ipc.h	2016-04-14 21:14:00.000000000 -0300
+@@ -7,9 +7,9 @@
+ #include <sys/signal.h>
+ #include <sys/types.h>
+ 
+-/*==========================================================================* 
++/*==========================================================================*
+  * Types relating to messages. 						    *
+- *==========================================================================*/ 
++ *==========================================================================*/
+ 
+ #define M_PATH_STRING_MAX  40
+ 
+@@ -2024,6 +2024,22 @@
+ _ASSERT_MSG_SIZE(mess_vmmcp_reply);
+ 
+ typedef struct {
++  pid_t pid;
++
++  uint8_t padding[52];
++} mess_spadmon_pid;
++_ASSERT_MSG_SIZE(mess_spadmon_pid);
++
++typedef struct {
++  pid_t pid;
++	int opt;
++	int flag;
++
++  uint8_t padding[44];
++} mess_spadmon_pf;
++_ASSERT_MSG_SIZE(mess_spadmon_pf);
++
++typedef struct {
+ 	endpoint_t m_source;		/* who sent the message */
+ 	int m_type;			/* what kind of message is it */
+ 	union {
+@@ -2251,6 +2267,8 @@
+ 		mess_vm_vfs_mmap	m_vm_vfs_mmap;
+ 		mess_vmmcp		m_vmmcp;
+ 		mess_vmmcp_reply	m_vmmcp_reply;
++    mess_spadmon_pid m_spadmon_pid;
++		mess_spadmon_pf m_spadmon_pf;
+ 
+ 		u8_t size[56];	/* message payload may have 56 bytes at most */
+ 	};
+@@ -2322,9 +2340,9 @@
+ #define m10_ull1 m_m10.m10ull1
+ 
+ 
+-/*==========================================================================* 
++/*==========================================================================*
+  * Minix run-time system (IPC). 					    *
+- *==========================================================================*/ 
++ *==========================================================================*/
+ 
+ /* Datastructure for asynchronous sends */
+ typedef struct asynmsg
+diff -ruNP R3.3.0/minix/include/minix/procflag.h so2016/minix/include/minix/procflag.h
+--- R3.3.0/minix/include/minix/procflag.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/include/minix/procflag.h	2016-04-14 21:09:01.000000000 -0300
+@@ -0,0 +1,10 @@
++
++#ifndef _MINIX_SYSINFO_H
++#define _MINIX_SYSINFO_H
++
++#include <minix/endpoint.h>
++#include <minix/type.h>
++
++int procflag(pid_t pid, int opt, int flag);
++
++#endif
+diff -ruNP R3.3.0/minix/kernel/table.c so2016/minix/kernel/table.c
+--- R3.3.0/minix/kernel/table.c	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/kernel/table.c	2016-04-01 22:43:04.000000000 -0300
+@@ -1,4 +1,4 @@
+-/* The object file of "table.c" contains most kernel data. Variables that 
++/* The object file of "table.c" contains most kernel data. Variables that
+  * are declared in the *.h files appear with EXTERN in front of them, as in
+  *
+  *    EXTERN int x;
+@@ -13,13 +13,13 @@
+  * so they are declared extern when included normally.  However, it must be
+  * declared for real somewhere.  That is done here, by redefining EXTERN as
+  * the null string, so that inclusion of all *.h files in table.c actually
+- * generates storage for them.  
++ * generates storage for them.
+  *
+  * Various variables could not be declared EXTERN, but are declared PUBLIC
+- * or PRIVATE. The reason for this is that extern variables cannot have a  
++ * or PRIVATE. The reason for this is that extern variables cannot have a
+  * default initialization. If such variables are shared, they must also be
+- * declared in one of the *.h files without the initialization.  Examples 
+- * include 'boot_image' (this file) and 'idt' and 'gdt' (protect.c). 
++ * declared in one of the *.h files without the initialization.  Examples
++ * include 'boot_image' (this file) and 'idt' and 'gdt' (protect.c).
+  *
+  * Changes:
+  *    Nov 22, 2009   rewrite of privilege management (Cristiano Giuffrida)
+@@ -32,7 +32,7 @@
+ #include "kernel/kernel.h"
+ #include <minix/com.h>
+ 
+-/* The system image table lists all programs that are part of the boot image. 
++/* The system image table lists all programs that are part of the boot image.
+  * The order of the entries here MUST agree with the order of the programs
+  * in the boot image and all kernel tasks must come first.
+  * The order of the entries here matches the priority NOTIFY messages are
+@@ -49,11 +49,12 @@
+ {CLOCK,         "clock" },
+ {SYSTEM,        "system"},
+ {HARDWARE,      "kernel"},
+-                      
++
+ {DS_PROC_NR,    "ds"    },
+ {RS_PROC_NR,    "rs"    },
+-                      
++
+ {PM_PROC_NR,    "pm"    },
++{SPADMON_PROC_NR, "spadmon" },
+ {SCHED_PROC_NR, "sched" },
+ {VFS_PROC_NR,   "vfs"   },
+ {MEM_PROC_NR,   "memory"},
+@@ -63,4 +64,3 @@
+ {PFS_PROC_NR,   "pfs"   },
+ {INIT_PROC_NR,  "init"  },
+ };
+-
+diff -ruNP R3.3.0/minix/lib/libc/sys/Makefile.inc so2016/minix/lib/libc/sys/Makefile.inc
+--- R3.3.0/minix/lib/libc/sys/Makefile.inc	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/lib/libc/sys/Makefile.inc	2016-04-14 18:42:33.000000000 -0300
+@@ -22,7 +22,7 @@
+ 	sync.c syscall.c sysuname.c truncate.c umask.c unlink.c write.c \
+ 	utimensat.c utimes.c futimes.c lutimes.c futimens.c \
+ 	_exit.c _ucontext.c environ.c __getcwd.c vfork.c sizeup.c init.c \
+-	getrusage.c setrlimit.c setpgid.c
++	getrusage.c setrlimit.c setpgid.c spadmon.c
+ 
+ # Minix specific syscalls / utils.
+ SRCS+= cprofile.c sprofile.c stack_utils.c _mcontext.c
+diff -ruNP R3.3.0/minix/lib/libc/sys/spadmon.c so2016/minix/lib/libc/sys/spadmon.c
+--- R3.3.0/minix/lib/libc/sys/spadmon.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/lib/libc/sys/spadmon.c	2016-04-12 18:52:31.000000000 -0300
+@@ -0,0 +1,87 @@
++#include <sys/cdefs.h>
++#include "namespace.h"
++#include <lib.h>
++
++#include <string.h>
++#include <signal.h>
++
++#include <sys/cdefs.h>
++#include <sys/types.h>
++#include <sys/sigtypes.h>
++#include <sys/signal.h>
++
++int spadmon_states(void)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_STATES, &m));
++}
++
++int spadmon_run(pid_t pid)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++  m.m_spadmon_pid.pid = pid;
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_RUN, &m));
++}
++
++int spadmon_sleep(pid_t pid)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++  m.m_spadmon_pid.pid = pid;
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_SLEEP, &m));
++}
++
++int spadmon_stop(pid_t pid)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++  m.m_spadmon_pid.pid = pid;
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_STOP, &m));
++}
++
++int spadmon_zombie(pid_t pid)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++  m.m_spadmon_pid.pid = pid;
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_ZOMBIE, &m));
++}
++
++int spadmon_exit(pid_t pid)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++  m.m_spadmon_pid.pid = pid;
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_EXIT, &m));
++}
++
++int spadmon_test_call(void)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++
++  return(_syscall(SPADMON_PROC_NR, SPADMON_TEST_CALL, &m));
++}
++
++int spadmon_proc_state(void)
++{
++  message m;
++
++  memset(&m, 0, sizeof(m));
++  return(_syscall(SPADMON_PROC_NR, SPADMON_PROC_STATE, &m));
++}
+diff -ruNP R3.3.0/minix/lib/libsys/Makefile so2016/minix/lib/libsys/Makefile
+--- R3.3.0/minix/lib/libsys/Makefile	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/lib/libsys/Makefile	2016-04-14 18:45:53.000000000 -0300
+@@ -103,7 +103,8 @@
+ 	vm_procctl.c \
+ 	vm_query_exit.c \
+ 	vm_set_priv.c \
+-	vm_update.c
++	vm_update.c \
++	procflag.c
+ 
+ .if ${MKPCI} != "no"
+ SRCS+=	pci_attr_r16.c \
+diff -ruNP R3.3.0/minix/lib/libsys/procflag.c so2016/minix/lib/libsys/procflag.c
+--- R3.3.0/minix/lib/libsys/procflag.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/lib/libsys/procflag.c	2016-04-14 21:06:21.000000000 -0300
+@@ -0,0 +1,21 @@
++
++#include "syslib.h"
++
++#include <string.h>
++#include <minix/sysinfo.h>
++#include <minix/com.h>
++
++int procflag(
++  pid_t pid,
++  int opt,
++  int flag
++)
++{
++  message m;
++  memset(&m, 0, sizeof(m));
++  m.m_spadmon_pf.pid = pid;
++  m.m_spadmon_pf.opt = opt;
++  m.m_spadmon_pf.flag = flag;
++
++  return _taskcall(PM_PROC_NR, PM_PROCFLAG, &m);
++}
+Binary files R3.3.0/minix/servers/.DS_Store and so2016/minix/servers/.DS_Store differ
+diff -ruNP R3.3.0/minix/servers/Makefile so2016/minix/servers/Makefile
+--- R3.3.0/minix/servers/Makefile	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/servers/Makefile	2016-03-25 17:35:42.000000000 -0300
+@@ -1,6 +1,6 @@
+ .include <bsd.own.mk>
+ 
+-SUBDIR+=	ds input pm rs sched vfs vm
++SUBDIR+=	ds input pm rs sched vfs vm spadmon
+ 
+ .if ${MKIMAGEONLY} == "no"
+ SUBDIR+=	ipc is devman
+diff -ruNP R3.3.0/minix/servers/pm/misc.c so2016/minix/servers/pm/misc.c
+--- R3.3.0/minix/servers/pm/misc.c	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/servers/pm/misc.c	2016-04-14 21:30:20.000000000 -0300
+@@ -26,6 +26,7 @@
+ #include <assert.h>
+ #include "mproc.h"
+ #include "kernel/proc.h"
++#include "../spadmon/procflag.h"
+ 
+ struct utsname uts_val = {
+   OS_NAME,		/* system name */
+@@ -149,7 +150,7 @@
+   case SI_CALL_STATS:
+   	src_addr = (vir_bytes) calls_stats;
+   	len = sizeof(calls_stats);
+-  	break; 
++  	break;
+ #endif
+   default:
+   	return(EINVAL);
+@@ -163,6 +164,38 @@
+ }
+ 
+ /*===========================================================================*
++ *				do_procflag			       	     *
++ *===========================================================================*/
++int do_procflag()
++{
++  struct mproc *rmp;
++
++  if (mp->mp_effuid != 0)
++  {
++	printf("PM: unauthorized call of do_getsysinfo by proc %d '%s'\n",
++		mp->mp_endpoint, mp->mp_name);
++	sys_diagctl_stacktrace(mp->mp_endpoint);
++	return EPERM;
++  }
++
++  if ((rmp = find_proc(m_in.m_spadmon_pf.pid)) == NULL) return(ESRCH);
++  if (rmp->mp_flags & EXITING) return(ESRCH);
++
++  switch (m_in.m_spadmon_pf.opt) {
++    case FLAG_ADD:
++      rmp->mp_flags |= m_in.m_spadmon_pf.flag;
++      break;
++    case FLAG_RM:
++      rmp->mp_flags &= ~m_in.m_spadmon_pf.flag;
++      break;
++    default:
++      return(EINVAL);
++  }
++
++  return (OK);
++}
++
++/*===========================================================================*
+  *				do_getprocnr			             *
+  *===========================================================================*/
+ int do_getprocnr(void)
+@@ -225,7 +258,7 @@
+ 
+   /* Order matters here. When VFS is told to reboot, it exits all its
+    * processes, and then would be confused if they're exited again by
+-   * SIGKILL. So first kill, then reboot. 
++   * SIGKILL. So first kill, then reboot.
+    */
+ 
+   check_sig(-1, SIGKILL, FALSE /* ksig*/); /* kill all users except init */
+@@ -276,7 +309,7 @@
+ 	/* Only root is allowed to reduce the nice level. */
+ 	if (rmp->mp_nice > arg_pri && mp->mp_effuid != SUPER_USER)
+ 		return(EACCES);
+-	
++
+ 	/* We're SET, and it's allowed.
+ 	 *
+ 	 * The value passed in is currently between PRIO_MIN and PRIO_MAX.
+@@ -323,8 +356,8 @@
+       size_t copy_len;
+ 
+       /* Copy sysgetenv structure to PM. */
+-      if (sys_datacopy(who_e, ptr, SELF, (vir_bytes) &sysgetenv, 
+-              sizeof(sysgetenv)) != OK) return(EFAULT);  
++      if (sys_datacopy(who_e, ptr, SELF, (vir_bytes) &sysgetenv,
++              sizeof(sysgetenv)) != OK) return(EFAULT);
+ 
+       /* Set a param override? */
+       if (req == PMSETPARAM) {
+@@ -336,7 +369,7 @@
+   	 || sysgetenv.vallen >=
+   	 	 sizeof(local_param_overrides[local_params].value))
+   		return EINVAL;
+-  		
++
+           if ((s = sys_datacopy(who_e, (vir_bytes) sysgetenv.key,
+             SELF, (vir_bytes) local_param_overrides[local_params].name,
+                sysgetenv.keylen)) != OK)
+@@ -356,7 +389,7 @@
+       if (sysgetenv.keylen == 0) {	/* copy all parameters */
+           val_start = monitor_params;
+           val_len = sizeof(monitor_params);
+-      } 
++      }
+       else {				/* lookup value for key */
+       	  int p;
+           /* Try to get a copy of the requested key. */
+@@ -385,8 +418,8 @@
+       	return E2BIG;
+ 
+       /* Value found, make the actual copy (as far as possible). */
+-      copy_len = MIN(val_len, sysgetenv.vallen); 
+-      if ((s=sys_datacopy(SELF, (vir_bytes) val_start, 
++      copy_len = MIN(val_len, sysgetenv.vallen);
++      if ((s=sys_datacopy(SELF, (vir_bytes) val_start,
+               who_e, (vir_bytes) sysgetenv.val, copy_len)) != OK)
+           return(s);
+ 
+diff -ruNP R3.3.0/minix/servers/pm/proto.h so2016/minix/servers/pm/proto.h
+--- R3.3.0/minix/servers/pm/proto.h	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/servers/pm/proto.h	2016-04-14 21:06:14.000000000 -0300
+@@ -46,6 +46,7 @@
+ int do_svrctl(void);
+ int do_getsetpriority(void);
+ int do_getrusage(void);
++int do_procflag(void);
+ 
+ /* schedule.c */
+ void sched_init(void);
+diff -ruNP R3.3.0/minix/servers/pm/table.c so2016/minix/servers/pm/table.c
+--- R3.3.0/minix/servers/pm/table.c	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/servers/pm/table.c	2016-04-14 21:14:45.000000000 -0300
+@@ -58,5 +58,8 @@
+ 	CALL(PM_EXEC_RESTART)	= do_execrestart,
+ 	CALL(PM_GETEPINFO)	= do_getepinfo,		/* getepinfo(2) */
+ 	CALL(PM_GETPROCNR)	= do_getprocnr,		/* getprocnr(2) */
+-	CALL(PM_GETSYSINFO)	= do_getsysinfo		/* getsysinfo(2) */
++	CALL(PM_GETSYSINFO)	= do_getsysinfo,		/* getsysinfo(2) */
++	CALL(PM_PROCFLAG)	= do_procflag		/* procflag(2) */
++
++
+ };
+diff -ruNP R3.3.0/minix/servers/pm/utility.c so2016/minix/servers/pm/utility.c
+--- R3.3.0/minix/servers/pm/utility.c	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/servers/pm/utility.c	2016-04-13 19:21:43.000000000 -0300
+@@ -26,6 +26,7 @@
+ #include "kernel/config.h"
+ #include "kernel/type.h"
+ #include "kernel/proc.h"
++#include <string.h>
+ 
+ /*===========================================================================*
+  *				get_free_pid				     *
+@@ -38,7 +39,7 @@
+ 
+   /* Find a free pid for the child and put it in the table. */
+   do {
+-	t = 0;			
++	t = 0;
+ 	next_pid = (next_pid < NR_PIDS ? next_pid + 1 : INIT_PID + 1);
+ 	for (rmp = &mproc[0]; rmp < &mproc[NR_PROCS]; rmp++)
+ 		if (rmp->mp_pid == next_pid || rmp->mp_procgrp == next_pid) {
+@@ -61,7 +62,7 @@
+   for (envp = (char *) monitor_params; *envp != 0;) {
+ 	for (namep = name; *namep != 0 && *namep == *envp; namep++, envp++)
+ 		;
+-	if (*namep == '\0' && *envp == '=') 
++	if (*namep == '\0' && *envp == '=')
+ 		return(envp + 1);
+ 	while (*envp++ != 0)
+ 		;
+@@ -136,3 +137,17 @@
+ 
+   rmp->mp_flags |= VFS_CALL;
+ }
++
++int do_changeprocname(void){
++  pid_t pid;
++  struct mproc *rmp;
++
++  pid = m_in.m_spadmon_pid.pid;
++
++  if ((rmp = find_proc(m_in.m_lc_pm_ptrace.pid)) == NULL) return(ESRCH);
++  if (rmp->mp_flags & EXITING) return(ESRCH);
++
++  strcpy(rmp->mp_name, "cambiadojiji");
++
++  return (OK);
++}
+diff -ruNP R3.3.0/minix/servers/rs/table.c so2016/minix/servers/rs/table.c
+--- R3.3.0/minix/servers/rs/table.c	2016-04-15 09:02:43.000000000 -0300
++++ so2016/minix/servers/rs/table.c	2016-04-01 22:43:04.000000000 -0300
+@@ -17,6 +17,7 @@
+ {RS_PROC_NR,   "rs",     RSYS_F },
+ {VM_PROC_NR,   "vm",     VM_F   },
+ {PM_PROC_NR,   "pm",     SRV_F  },
++{SPADMON_PROC_NR,   "spadmon",     SRV_F  },
+ {SCHED_PROC_NR,"sched",  SRV_F  },
+ {VFS_PROC_NR,  "vfs",    SRV_F  },
+ {DS_PROC_NR,   "ds",     SRV_F  },
+@@ -34,6 +35,7 @@
+   { RS_PROC_NR,       SRVR_SF                           },
+   { VM_PROC_NR,       VM_SF                             },
+   { PM_PROC_NR,       SRVR_SF                           },
++  { SPADMON_PROC_NR,       SRV_SF                           },
+   { VFS_PROC_NR,      SRVR_SF                           },
+   { MFS_PROC_NR,      0                                 },
+   { PFS_PROC_NR,      SRV_SF                            },
+diff -ruNP R3.3.0/minix/servers/spadmon/Makefile so2016/minix/servers/spadmon/Makefile
+--- R3.3.0/minix/servers/spadmon/Makefile	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/Makefile	2016-04-12 13:31:33.000000000 -0300
+@@ -0,0 +1,13 @@
++.include <bsd.own.mk>
++
++# Makefile for SPADMON
++PROG=	spadmon
++SRCS=	main.c table.c spadmon.c
++
++DPADD+=	${LIBSYS} ${LIBTIMERS}
++LDADD+=	-lsys -ltimers
++
++CPPFLAGS.main.c+=	-I${NETBSDSRCDIR}/minix
++CPPFLAGS.spadmon.c+= -I${NETBSDSRCDIR}/minix
++
++.include <minix.service.mk>
+diff -ruNP R3.3.0/minix/servers/spadmon/const.h so2016/minix/servers/spadmon/const.h
+--- R3.3.0/minix/servers/spadmon/const.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/const.h	2016-03-25 17:03:21.000000000 -0300
+@@ -0,0 +1,19 @@
++/* Constants used by the Process Manager. */
++
++#define NR_PIDS	       30000	/* process ids range from 0 to NR_PIDS-1.
++				 * (magic constant: some old applications use
++				 * a 'short' instead of pid_t.)
++				 */
++
++#define NO_PID	           0	/* pid value indicating no process */
++#define INIT_PID	   1	/* INIT's process id number */
++
++#define NO_TRACER	   0	/* process is not being traced */
++
++#define MAX_CLOCK_T	((unsigned long) 1 << ((sizeof(clock_t) * 8) - 1))
++#define MAX_SECS	( (clock_t) (MAX_CLOCK_T/system_hz) )
++				/* max.secs for setitimer() ((2^31-1)/HZ) */
++#define NR_ITIMERS	   3	/* number of supported interval timers */
++
++#define SEND_PRIORITY      1	/* send current priority queue to scheduler */
++#define SEND_TIME_SLICE    2    /* send current time slice to scheduler */
+diff -ruNP R3.3.0/minix/servers/spadmon/glo.h so2016/minix/servers/spadmon/glo.h
+--- R3.3.0/minix/servers/spadmon/glo.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/glo.h	2016-04-12 22:27:22.000000000 -0300
+@@ -0,0 +1,31 @@
++/* EXTERN should be extern except in table.c */
++#ifdef _TABLE
++#undef EXTERN
++#define EXTERN
++#endif
++
++/* Global variables. */
++EXTERN struct mproc *mp;	/* ptr to 'mproc' slot of current process */
++EXTERN int procs_in_use;	/* how many processes are marked as IN_USE */
++EXTERN char monitor_params[MULTIBOOT_PARAM_BUF_SIZE];
++
++/* Misc.c */
++extern struct utsname uts_val;	/* uname info */
++
++/* The parameters of the call are kept here. */
++EXTERN message m_in;		/* the incoming message itself is kept here. */
++EXTERN int who_p, who_e;	/* caller's proc number, endpoint */
++EXTERN int call_nr;		/* system call number */
++
++extern int (* const call_vec[])(void);
++EXTERN sigset_t core_sset;	/* which signals cause core images */
++EXTERN sigset_t ign_sset;	/* which signals are by default ignored */
++EXTERN sigset_t noign_sset;	/* which signals cannot be ignored */
++
++EXTERN u32_t system_hz;		/* System clock frequency. */
++EXTERN int abort_flag;
++
++EXTERN struct machine machine;		/* machine info */
++#ifdef CONFIG_SMP
++EXTERN int cpu_proc[CONFIG_MAX_CPUS];
++#endif
+diff -ruNP R3.3.0/minix/servers/spadmon/main.c so2016/minix/servers/spadmon/main.c
+--- R3.3.0/minix/servers/spadmon/main.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/main.c	2016-04-12 19:04:32.000000000 -0300
+@@ -0,0 +1,119 @@
++/* This file contains the main program of the process manager and some related
++ * procedures.  When MINIX starts up, the kernel runs for a little while,
++ * initializing itself and its tasks, and then it runs PM and VFS.  Both PM
++ * and VFS initialize themselves as far as they can. PM asks the kernel for
++ * all free memory and starts serving requests.
++ *
++ * The entry points into this file are:
++ *   main:	starts PM running
++ *   reply:	send a reply to a process making a PM system call
++ */
++
++#include "spadmon.h"
++#include <minix/callnr.h>
++#include <minix/com.h>
++#include <minix/ds.h>
++#include <minix/type.h>
++#include <minix/endpoint.h>
++#include <minix/minlib.h>
++#include <minix/type.h>
++#include <minix/vm.h>
++#include <signal.h>
++#include <stdlib.h>
++#include <fcntl.h>
++#include <sys/resource.h>
++#include <sys/utsname.h>
++#include <sys/wait.h>
++#include <machine/archtypes.h>
++#include <env.h>
++#include <assert.h>
++
++#include "kernel/const.h"
++#include "kernel/config.h"
++#include "kernel/proc.h"
++
++/* Declare some local functions. */
++static void reply(endpoint_t whom, message *m_ptr);
++static void sef_local_startup(void);
++
++/*===========================================================================*
++ *				main					     *
++ *===========================================================================*/
++int main(void)
++{
++	/* Main routine of the scheduler. */
++	int result;	/* result to system call */
++	int rv;
++	int s;
++  unsigned int call_index;
++
++	/* SEF local startup. */
++	sef_local_startup();
++
++	if (OK != (s=sys_getmachine(&machine)))
++		panic("couldn't get machine info: %d", s);
++
++	/* This is SPADMON's main loop - get work and do it, forever and forever. */
++	while (TRUE) {
++		int ipc_status;
++
++		/* Wait for the next message and extract useful information from it. */
++		if (sef_receive_status(ANY, &m_in, &ipc_status) != OK)
++			panic("SPADMON sef_receive error");
++		who_e = m_in.m_source;	/* who sent the message */
++		call_nr = m_in.m_type;	/* system call number */
++
++		/* Check for system notifications first. Special cases. */
++    if (is_ipc_notify(ipc_status)) {
++  		if (_ENDPOINT_P(who_e) == CLOCK)
++  			expire_timers(m_in.m_notify.timestamp);
++
++  		/* done, continue */
++  		continue;
++  	}
++
++    if (IS_SPADMON_CALL(call_nr)) {
++    		/* If the system call number is valid, perform the call. */
++    		call_index = (unsigned int) (call_nr - SPADMON_BASE);
++
++    		if (call_index < NR_SPADMON_CALLS && call_vec[call_index] != NULL) {
++    #if ENABLE_SYSCALL_STATS
++    			calls_stats[call_index]++;
++    #endif
++    			result = (*call_vec[call_index])();
++    		} else
++    			result = ENOSYS;
++    	} else
++    		result = ENOSYS;
++
++		/* Send reply. */
++		if (result != SUSPEND) {
++			m_in.m_type = result;  		/* build reply message */
++			reply(who_e, &m_in);		/* send it away */
++		}
++ 	}
++	return(OK);
++}
++
++/*===========================================================================*
++ *				reply					     *
++ *===========================================================================*/
++static void reply(endpoint_t who_e, message *m_ptr)
++{
++	int s = ipc_send(who_e, m_ptr);    /* send the message */
++	if (OK != s)
++		printf("SPADMON: unable to send reply to %d: %d\n", who_e, s);
++}
++
++/*===========================================================================*
++ *			       sef_local_startup			     *
++ *===========================================================================*/
++static void sef_local_startup(void)
++{
++	/* No init callbacks for now. */
++	/* No live update support for now. */
++	/* No signal callbacks for now. */
++
++	/* Let SEF perform startup. */
++	sef_startup();
++}
+diff -ruNP R3.3.0/minix/servers/spadmon/procflag.h so2016/minix/servers/spadmon/procflag.h
+--- R3.3.0/minix/servers/spadmon/procflag.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/procflag.h	2016-04-14 21:25:43.000000000 -0300
+@@ -0,0 +1,4 @@
++/* Options for procflag */
++
++#define FLAG_ADD (1)
++#define FLAG_RM (-1)
+diff -ruNP R3.3.0/minix/servers/spadmon/proto.h so2016/minix/servers/spadmon/proto.h
+--- R3.3.0/minix/servers/spadmon/proto.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/proto.h	2016-04-14 21:56:31.000000000 -0300
+@@ -0,0 +1,23 @@
++/* Function prototypes. */
++
++struct mproc;
++
++#include <minix/timers.h>
++
++/* main.c */
++int main(void);
++
++/* padmon.c */
++int do_spadmon_states(void);
++int do_spadmon_run(void);
++int do_spadmon_sleep(void);
++int do_spadmon_stop(void);
++int do_spadmon_zombie(void);
++int do_spadmon_exit(void);
++
++int do_spadmon_test_call(void);
++int do_spadmon_proc_state(void);
++
++int update_tables(void);
++
++int procflag(pid_t pid, int opt, int flag);
+diff -ruNP R3.3.0/minix/servers/spadmon/spadmon.c so2016/minix/servers/spadmon/spadmon.c
+--- R3.3.0/minix/servers/spadmon/spadmon.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/spadmon.c	2016-04-15 09:00:52.000000000 -0300
+@@ -0,0 +1,254 @@
++#include "spadmon.h"
++#include <sys/stat.h>
++#include <sys/ptrace.h>
++#include <sys/signal.h>
++#include <minix/callnr.h>
++#include <minix/endpoint.h>
++#include <minix/com.h>
++#include <minix/vm.h>
++#include <signal.h>
++#include <sys/resource.h>
++#include <assert.h>
++
++#include <minix/procfs.h>
++#include <machine/archtypes.h>
++#include <minix/timers.h>				/* For priv.h */
++#include "kernel/priv.h"
++#include "kernel/ipc.h"
++#include "kernel/proc.h"
++#include "../pm/mproc.h"
++#include "../vfs/const.h"
++#include "../vfs/fproc.h"
++#include "../vfs/dmap.h"
++
++struct proc proc[NR_PROCS + NR_TASKS];
++struct mproc mproc[NR_PROCS];
++struct fproc fproc[NR_PROCS];
++
++const char process_state(int i)
++{
++  int pi, task, state, type;
++
++  pi = i - NR_TASKS;
++	task = proc[i].p_nr < 0;
++
++  /* Get the type of the process. */
++  if (task)
++    type = TYPE_TASK;
++  else if (mproc[i].mp_flags & PRIV_PROC)
++    type = TYPE_SYSTEM;
++  else
++    type = TYPE_USER;
++
++  /* Get the state of the process. */
++	if (!task) {
++		if (i >= NR_TASKS && (mproc[pi].mp_flags & (TRACE_ZOMBIE | ZOMBIE)))
++			state = STATE_ZOMBIE;	/* zombie */
++		else if (mproc[pi].mp_flags & TRACE_STOPPED)
++			state = STATE_STOP;	/* stopped (traced) */
++		else if (proc[i].p_rts_flags == 0)
++			state = STATE_RUN;	/* in run-queue */
++		else if (fp_is_blocked(&fproc[pi]) ||
++		(mproc[pi].mp_flags & (WAITING | SIGSUSPENDED)))
++			state = STATE_SLEEP;	/* sleeping */
++		else
++			state = STATE_WAIT;	/* waiting */
++	} else {
++		if (proc[i].p_rts_flags == 0)
++			state = STATE_RUN;	/* in run-queue */
++		else
++			state = STATE_WAIT;	/* other i.e. waiting */
++	}
++
++  return state;
++}
++
++int do_spadmon_states(void)
++{
++  struct mproc *mp;
++
++  int r = update_tables();
++  if (r != OK) return r;
++
++  printf(PPS_HEADER);
++
++  for (int i = 0; i < NR_PROCS; i++)
++  {
++  	mp = &mproc[i];
++  	if (mp->mp_pid == 0 && i != PM_PROC_NR) continue;
++
++    const char state = process_state(mp->mp_pid);
++    char state2;
++    if (state == STATE_SLEEP)
++      state2 = 'S';
++    else if (state == STATE_WAIT)
++      state2 = 'D';
++  	else if (state == STATE_STOP)
++      state2 = 'T';
++    else if (state == STATE_ZOMBIE)
++      state2 = 'Z';
++    else if (state == STATE_RUN)
++      state2 = 'S';
++    else
++      state2 = '?';
++
++    printf (PPS_FORMAT, (int)mp->mp_pid, state2);
++  }
++
++  printf(PPS_FOOTER);
++
++  return (OK);
++}
++
++int do_spadmon_run(void)
++{
++  struct mproc *mp;
++  pid_t pid = m_in.m_spadmon_pid.pid;
++
++  int r = update_tables();
++  if (r != OK) return r;
++
++  for (int i = 0; i < NR_PROCS; i++)
++  {
++    mp = &mproc[i];
++    if (mp->mp_pid == 0 && i != PM_PROC_NR) continue;
++
++    if (mp->mp_pid == pid)
++    {
++      if (mp->mp_flags & ZOMBIE) procflag(pid, FLAG_RM, ZOMBIE);
++      if (mp->mp_flags & TRACE_ZOMBIE) procflag(pid, FLAG_RM, TRACE_ZOMBIE);
++      if (mp->mp_flags & TRACE_STOPPED) procflag(pid, FLAG_RM, TRACE_STOPPED);
++      if (mp->mp_flags & WAITING) procflag(pid, FLAG_RM, WAITING);
++      if (mp->mp_flags & SIGSUSPENDED) procflag(pid, FLAG_RM, SIGSUSPENDED);
++
++      return (OK);
++    }
++  }
++
++  printf("Process not found!\n");
++  return (ESRCH);
++}
++
++int do_spadmon_sleep()
++{
++  struct mproc *mp;
++  pid_t pid = m_in.m_spadmon_pid.pid;
++
++  int r = update_tables();
++  if (r != OK) return r;
++
++  for (int i = 0; i < NR_PROCS; i++)
++  {
++    mp = &mproc[i];
++    if (mp->mp_pid == 0 && i != PM_PROC_NR) continue;
++
++    if (mp->mp_pid == pid)
++    {
++      if (mp->mp_flags & ZOMBIE) procflag(pid, FLAG_RM, ZOMBIE);
++      if (mp->mp_flags & TRACE_ZOMBIE) procflag(pid, FLAG_RM, TRACE_ZOMBIE);
++      if (mp->mp_flags & TRACE_STOPPED) procflag(pid, FLAG_RM, TRACE_STOPPED);
++      if (mp->mp_flags & WAITING) return (OK);
++      if (mp->mp_flags & SIGSUSPENDED) return (OK);
++
++      return procflag(pid, FLAG_ADD, WAITING) + procflag(pid, FLAG_ADD, SIGSUSPENDED);
++    }
++  }
++
++  printf("Process not found!\n");
++  return (ESRCH);
++}
++
++int do_spadmon_stop(void)
++{
++  struct mproc *mp;
++  pid_t pid = m_in.m_spadmon_pid.pid;
++
++  int r = update_tables();
++  if (r != OK) return r;
++
++  for (int i = 0; i < NR_PROCS; i++)
++  {
++    mp = &mproc[i];
++    if (mp->mp_pid == 0 && i != PM_PROC_NR) continue;
++
++    if (mp->mp_pid == pid)
++    {
++      if (mp->mp_flags & ZOMBIE) procflag(pid, FLAG_RM, ZOMBIE);
++      if (mp->mp_flags & TRACE_ZOMBIE) procflag(pid, FLAG_RM, TRACE_ZOMBIE);
++      if (mp->mp_flags & WAITING) procflag(pid, FLAG_RM, WAITING);
++      if (mp->mp_flags & SIGSUSPENDED) procflag(pid, FLAG_RM, SIGSUSPENDED);
++      if (mp->mp_flags & TRACE_STOPPED) return (OK);
++
++      return procflag(pid, FLAG_ADD, TRACE_STOPPED);
++    }
++  }
++
++  printf("Process not found!\n");
++  return (ESRCH);
++}
++
++int do_spadmon_zombie(void)
++{
++  struct mproc *mp;
++  pid_t pid = m_in.m_spadmon_pid.pid;
++
++  int r = update_tables();
++  if (r != OK) return r;
++
++  for (int i = 0; i < NR_PROCS; i++)
++  {
++    mp = &mproc[i];
++    if (mp->mp_pid == 0 && i != PM_PROC_NR) continue;
++
++    if (mp->mp_pid == pid)
++      if (mp->mp_flags & (ZOMBIE | TRACE_ZOMBIE)) return (OK);
++
++    return procflag(pid, FLAG_ADD, ZOMBIE);
++  }
++
++  printf("Process not found!\n");
++  return (ESRCH);
++}
++
++int do_spadmon_exit(void)
++{
++  struct mproc *mp;
++  pid_t pid = m_in.m_spadmon_pid.pid;
++
++  return kill(pid, SIGKILL);
++}
++
++int do_spadmon_test_call(void)
++{
++  printf("SPADMON TEST CALL WORKS FINE!");
++  return(OK);
++}
++
++int do_spadmon_proc_state(void)
++{
++  //getProcessList();
++  return(OK);
++}
++
++int update_tables(void)
++{
++  if (getsysinfo(PM_PROC_NR, SI_PROC_TAB, mproc, sizeof(mproc)) != OK)
++  {
++    printf("Error obtaining table from PM. Perhaps recompile?\n");
++    return (EINVAL);
++  }
++
++  if (getsysinfo(VFS_PROC_NR, SI_PROC_TAB, fproc, sizeof(fproc)) != OK)
++  {
++    printf("Error obtaining table from VFS. Perhaps recompile?\n");
++    return (EINVAL);
++  }
++
++  if (sys_getproctab(proc) != OK)
++  {
++    printf("Error obtaining table from KERNEL. Perhaps recompile?\n");
++    return (EINVAL);
++  }
++
++  return (OK);
++}
+diff -ruNP R3.3.0/minix/servers/spadmon/spadmon.h so2016/minix/servers/spadmon/spadmon.h
+--- R3.3.0/minix/servers/spadmon/spadmon.h	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/spadmon.h	2016-04-14 21:01:02.000000000 -0300
+@@ -0,0 +1,35 @@
++/* This is the master header for PM.  It includes some other files
++ * and defines the principal constants.
++ */
++#define _SYSTEM		1	/* tell headers that this is the kernel */
++
++/* The following are so basic, all the *.c files get them automatically. */
++#include <minix/config.h>	/* MUST be first */
++#include <sys/types.h>
++#include <minix/const.h>
++#include <minix/type.h>
++
++#include <fcntl.h>
++#include <unistd.h>
++#include <string.h>
++#include <minix/syslib.h>
++#include <minix/sysutil.h>
++#include <minix/sysinfo.h>
++#include <minix/timers.h>
++#include <minix/param.h>
++
++#include <limits.h>
++#include <errno.h>
++#include <sys/param.h>
++
++#include "const.h"
++#include "proto.h"
++#include "glo.h"
++#include "procflag.h"
++
++#include <dirent.h>
++#include <minix/procfs.h>
++
++#define PPS_HEADER "---------------------\n PID/EndPoint State\n---------------------\n"
++#define PPS_FORMAT "  %d\t\t%c\n"
++#define PPS_FOOTER "---------------------\n"
+diff -ruNP R3.3.0/minix/servers/spadmon/table.c so2016/minix/servers/spadmon/table.c
+--- R3.3.0/minix/servers/spadmon/table.c	1969-12-31 21:00:00.000000000 -0300
++++ so2016/minix/servers/spadmon/table.c	2016-04-12 13:31:33.000000000 -0300
+@@ -0,0 +1,22 @@
++/* This file contains the table used to map system call numbers onto the
++ * routines that perform them.
++ */
++
++#define _TABLE
++
++#include "spadmon.h"
++#include <minix/callnr.h>
++#include <signal.h>
++
++#define CALL(n)	[((n) - SPADMON_BASE)]
++
++int (* const call_vec[NR_SPADMON_CALLS])(void) = {
++  CALL(SPADMON_PROC_STATE) = do_spadmon_proc_state, /* spadmon_proc_state(2) */
++  CALL(SPADMON_STATES)     = do_spadmon_states,     /* spadmon_states(2) */
++  CALL(SPADMON_RUN)        = do_spadmon_run,        /* spadmon_run(2) */
++  CALL(SPADMON_SLEEP)      = do_spadmon_sleep,      /* spadmon_sleep(2) */
++  CALL(SPADMON_STOP)       = do_spadmon_stop,       /* spadmon_stop(2) */
++  CALL(SPADMON_ZOMBIE)     = do_spadmon_zombie,     /* spadmon_zombie(2) */
++  CALL(SPADMON_EXIT)       = do_spadmon_exit,       /* spadmon_exit(2) */
++  CALL(SPADMON_TEST_CALL)  = do_spadmon_test_call   /* spadmon_test_call(2) */
++};
+Binary files R3.3.0/minix/servers/vm/arch/.DS_Store and so2016/minix/servers/vm/arch/.DS_Store differ
+Binary files R3.3.0/minix/servers/vm/arch/earm/.DS_Store and so2016/minix/servers/vm/arch/earm/.DS_Store differ
+diff -ruNP R3.3.0/releasetools/Makefile so2016/releasetools/Makefile
+--- R3.3.0/releasetools/Makefile	2016-04-15 09:02:43.000000000 -0300
++++ so2016/releasetools/Makefile	2016-03-25 17:37:26.000000000 -0300
+@@ -16,6 +16,7 @@
+ PROGRAMS+= ${PROGROOT}/minix/servers/ds/ds
+ PROGRAMS+= ${PROGROOT}/minix/servers/rs/rs
+ PROGRAMS+= ${PROGROOT}/minix/servers/pm/pm
++PROGRAMS+= ${PROGROOT}/minix/servers/spadmon/spadmon
+ PROGRAMS+= ${PROGROOT}/minix/servers/sched/sched
+ PROGRAMS+= ${PROGROOT}/minix/servers/vfs/vfs
+ PROGRAMS+= ${PROGROOT}/minix/drivers/storage/memory/memory
+@@ -70,7 +71,7 @@
+ 
+ services: kernel servers drivers sbin
+ 
+-do-hdboot: 
++do-hdboot:
+ 	@rm -rf ${DESTDIR}/boot/minix/.temp/
+ 	${INSTALL_DIR} ${DESTDIR}/boot/minix/.temp
+ # mod_0 is used to make alphabetical order equal to the boot order
+diff -ruNP R3.3.0/releasetools/arm_sdimage.sh so2016/releasetools/arm_sdimage.sh
+--- R3.3.0/releasetools/arm_sdimage.sh	2016-04-15 09:02:43.000000000 -0300
++++ so2016/releasetools/arm_sdimage.sh	2016-03-25 17:38:04.000000000 -0300
+@@ -247,7 +247,7 @@
+ 
+ mcopy -bsp -i ${IMG_DIR}/fat.img ${OBJ}/kernel.bin ::kernel.bin
+ 
+-for f in servers/vm/vm servers/rs/rs servers/pm/pm servers/sched/sched \
++for f in servers/vm/vm servers/rs/rs servers/pm/pm servers/spadmon/spadmon servers/sched/sched \
+ 	servers/vfs/vfs servers/ds/ds fs/mfs/mfs fs/pfs/pfs \
+ 	../sbin/init/init
+ do
+diff -ruNP R3.3.0/releasetools/gen_uEnv.txt.sh so2016/releasetools/gen_uEnv.txt.sh
+--- R3.3.0/releasetools/gen_uEnv.txt.sh	2016-04-15 09:02:43.000000000 -0300
++++ so2016/releasetools/gen_uEnv.txt.sh	2016-03-25 17:38:29.000000000 -0300
+@@ -12,6 +12,7 @@
+ 0x85800000 mfs.elf
+ 0x86000000 vm.elf
+ 0x86800000 pfs.elf
++0x87800000 spadmon.elf
+ 0x87000000 init.elf"
+ 
+ #
+@@ -22,7 +23,7 @@
+ BOOT="mmcbootcmd"
+ 
+ #default for the beagleboard-xM
+-CONSOLE=tty02 
++CONSOLE=tty02
+ #verbosity
+ VERBOSE=0
+ HZ=1000
+@@ -60,7 +61,7 @@
+ 	#prefix is an optional directory containing the ending /
+ 	load=$1
+ 	prefix=$2
+-	export IFS=" " 
++	export IFS=" "
+ 	echo $list | while true
+ 	do
+ 		if ! read -r mem addr
+@@ -78,9 +79,9 @@
+ echo "bootargs=console=$CONSOLE rootdevname=c0d0p1 verbose=$VERBOSE hz=$HZ"
+ echo
+ echo 'bootminix=setenv bootargs \$bootargs board_name=\$board_name ; echo \$bootargs; go  0x80200000 \\\"$bootargs\\\"'
+-echo 
++echo
+ echo "mmcbootcmd=echo starting from MMC ; mmc part 0; $(fill_cmd "fatload mmc 0:1" "") ; run bootminix"
+-echo 
++echo
+ echo "# Netbooting."
+ echo "serverip=192.168.12.10"
+ echo "ipaddr=192.168.12.62"
+diff -ruNP R3.3.0/releasetools/release.functions so2016/releasetools/release.functions
+--- R3.3.0/releasetools/release.functions	2016-04-15 09:02:43.000000000 -0300
++++ so2016/releasetools/release.functions	2016-03-25 17:38:57.000000000 -0300
+@@ -9,7 +9,7 @@
+ 	rootsects=`expr $rootsize / 512`
+ 	usrsects=`expr $usrsize / 512`
+ 
+-	# installboot -m needs at least 1KB 
++	# installboot -m needs at least 1KB
+ 	dd < /dev/zero >tmpimage count=2
+ 	partition -fm tmpimage 2 81:$rootsects* 0:0 81:$usrsects
+ 	installboot_nbsd -m tmpimage /usr/mdec/mbr
+@@ -73,14 +73,15 @@
+ load=/mod01_ds
+ load=/mod02_rs
+ load=/mod03_pm
+-load=/mod04_sched
+-load=/mod05_vfs
+-load=/mod06_memory
+-load=/mod07_tty
+-load=/mod08_mfs
+-load=/mod09_vm
+-load=/mod10_pfs
+-load=/mod11_init
++load=/mod04_spadmon
++load=/mod05_sched
++load=/mod06_vfs
++load=/mod07_memory
++load=/mod08_tty
++load=/mod09_mfs
++load=/mod10_vm
++load=/mod11_pfs
++load=/mod12_init
+ # This space intentionally left blank - leave to appease bootloader!
+ # This space intentionally left blank - leave to appease bootloader!
+ # This space intentionally left blank - leave to appease bootloader!
+@@ -108,7 +109,7 @@
+ 	then
+ 		index=pkg_summary
+ 		indexpath=$PACKAGEDIR/.index
+-	
++
+ 		if [ ! -d $indexpath ]
+ 		then	mkdir $indexpath
+ 		fi
+@@ -116,9 +117,9 @@
+ 		then	echo "Couldn't create $indexpath."
+ 			exit 1
+ 		fi
+-	
++
+ 		echo "" >$PACKAGEDIR/All/$index
+-	
++
+ 	        echo " * Transfering $PACKAGEDIR to $RELEASEPACKAGE"
+ 	        for pkgprefix in `cat $PACKAGELIST`
+ 	        do	realfn="`echo $PACKAGEDIR/All/${pkgprefix}*.tgz`"
+@@ -129,28 +130,28 @@
+ 			      p="`basename $realfn`"
+ 			      cd $PACKAGEDIR/All
+ 			      cp $p $RELEASEPACKAGE/
+-	
++
+ 			      indexname=$indexpath/$p.$index
+ 			      pkg_info -X $p >$indexname
+-	
++
+ 			      if [ ! -f $indexname ]
+ 			      then	echo Missing $indexname.
+ 				  exit 1
+ 			      fi
+-	
++
+ 			      if [ "`wc -l <$indexname`" -lt 3 ]
+ 			      then	$indexname is too short.
+ 				  rm $indexname
+ 				  exit 1
+ 			      fi
+-	
++
+ 			      cat $indexname >>$PACKAGEDIR/All/$index
+ 			  )
+ 	               else
+ 	                  echo "Can't find $pkgprefix Missing."
+ 	               fi
+ 	        done
+-	
++
+ 		bzip2 -f $PACKAGEDIR/All/$index
+ 		cp $PACKAGEDIR/All/$index.bz2 $RELEASEPACKAGE/
+ 	fi
